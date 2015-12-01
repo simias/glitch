@@ -284,6 +284,14 @@ fn glitch_hf(pixels: &mut[(u8, u8, u8)], width: usize, height: usize) {
 
         let edge = 100;
 
+        for i in 0..diff {
+            out[i] = line[i & !0xff];
+        }
+
+        for i in diff..width {
+            out[i] = line[i & !0xff];
+        }
+
         for i in diff..(line.len() - diff) {
             let a = col_sum(line[i - diff]) as i32;
             let b = col_sum(line[i]) as i32;
@@ -298,6 +306,79 @@ fn glitch_hf(pixels: &mut[(u8, u8, u8)], width: usize, height: usize) {
 
         for i in 0..line.len() {
             line[i] = out[i];
+        }
+    }
+}
+
+fn glitch_hf_detour(pixels: &mut[(u8, u8, u8)], width: usize, height: usize) {
+
+    for y in 0..height {
+        let offset = y * width;
+
+        let diff = 100;
+
+        let line = &mut pixels[offset..offset + width];
+
+        let mut start = 0;
+
+        for i in 0..line.len() {
+            let (r, g, b) = line[i];
+
+            if r < 245 || g < 245 || b < 245 {
+                start = i;
+                break;
+            }
+        }
+
+        let mut end = line.len();
+
+        for i in (0..line.len()).rev() {
+            let (r, g, b) = line[i];
+
+            if r < 245 || g < 245 || b < 245 {
+                end = i;
+                break;
+            }
+        }
+
+        if start >= end {
+            continue;
+        }
+
+        if start < diff {
+            start = 0;
+        } else {
+            start = start - diff;
+        }
+
+        if end + diff > width {
+            end = width;
+        } else {
+            end = end + diff;
+        }
+
+        let mut out = vec![(0u8, 0u8, 0u8); end - start];
+
+        {
+            let detour = &mut line[start..end];
+
+            let edge = 100;
+
+            for i in diff..(detour.len() - diff) {
+                let a = col_sum(detour[i - diff]) as i32;
+                let b = col_sum(detour[i]) as i32;
+                let c = col_sum(detour[i + diff]) as i32;
+
+                if (a - b).abs() > edge && (b - c).abs() > edge {
+                    out[i] = detour[i]
+                } else {
+                    out[i] = detour[i & !0xff]
+                }
+            }
+        }
+
+        for i in (start + diff)..(end - diff) {
+             line[i] = out[i - start];
         }
     }
 }
