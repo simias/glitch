@@ -27,7 +27,13 @@ fn main() {
         std::slice::from_raw_parts_mut(raw, width * height)
     };
 
-    glitch_hf(pixels, width, height);
+    let stripw = width / 3;
+
+    // glitch_filter_sort(pixels, width, height, 0, stripw);
+    // glitch_block(pixels, width, height, stripw, stripw * 2);
+    // glitch_block_sin(pixels, width, height, stripw * 2, width);
+
+    glitch_block_sin(pixels, width, height, 0, width);
 
     image::save_buffer(out_file,
                        &image,
@@ -44,7 +50,7 @@ fn glitch_sort(pixels: &mut[(u8, u8, u8)], width: usize, height: usize) {
         let line = &mut pixels[offset..offset + width];
 
         line.sort_by(|&a, &b| {
-            a.0.cmp(&b.0)
+            col_sum(a).cmp(&col_sum(b))
         });
     }
 
@@ -88,12 +94,13 @@ fn glitch_filter(pixels: &mut[(u8, u8, u8)], width: usize, height: usize) {
 
 }
 
-fn glitch_filter_sort(pixels: &mut[(u8, u8, u8)], width: usize, height: usize) {
+#[inline(never)]
+fn glitch_filter_sort(pixels: &mut[(u8, u8, u8)], width: usize, height: usize, start: usize, stop: usize) {
 
     for y in 0..height {
         let offset = y * width;
 
-        let line = &mut pixels[offset..offset + width];
+        let line = &mut pixels[offset + start .. offset + stop];
 
         let mut filtered: Vec<_> = line.iter().filter_map(|&c| {
             let (r, g, b) = c;
@@ -102,7 +109,7 @@ fn glitch_filter_sort(pixels: &mut[(u8, u8, u8)], width: usize, height: usize) {
             let g = g as u32;
             let b = b as u32;
 
-            if g < r && g < b { //if r + g + b > 130 {
+            if r + g + b > 256 {
                 Some (c)
             } else {
                 None
@@ -113,9 +120,13 @@ fn glitch_filter_sort(pixels: &mut[(u8, u8, u8)], width: usize, height: usize) {
             a.0.cmp(&b.0)
         });
 
-        for i in 0..line.len() {
-            line[i] = (0xff, 0xff, 0xff);
-        }
+        line.sort_by(|&a, &b| {
+            a.0.cmp(&b.0)
+        });
+
+        // for i in 0..line.len() {
+        //     line[i] = (0xff, 0xff, 0xff);
+        // }
 
         let start = (line.len() - filtered.len()) / 2;
 
@@ -138,7 +149,7 @@ fn glitch_detour(pixels: &mut[(u8, u8, u8)], width: usize, height: usize) {
         for i in 0..line.len() {
             let (r, g, b) = line[i];
 
-            if r < 245 || g < 245 || b < 245 {
+            if r < 128 || g < 128 || b < 128 {
                 start = i;
                 break;
             }
@@ -170,19 +181,21 @@ fn glitch_detour(pixels: &mut[(u8, u8, u8)], width: usize, height: usize) {
     }
 }
 
-fn glitch_block(pixels: &mut[(u8, u8, u8)], width: usize, height: usize) {
+fn glitch_block(pixels: &mut[(u8, u8, u8)], width: usize, height: usize, start: usize, stop: usize) {
 
     for y in 0..height {
         let offset = y * width;
 
-        let line = &mut pixels[offset..offset + width];
+        let line = &mut pixels[offset + start..offset + stop];
 
         let mut start = 0;
+
+        let lim = 150;
 
         for i in 0..line.len() {
             let (r, g, b) = line[i];
 
-            if r < 245 || g < 245 || b < 245 {
+            if r < lim || g < lim || b < lim {
                 start = i;
                 break;
             }
@@ -193,7 +206,7 @@ fn glitch_block(pixels: &mut[(u8, u8, u8)], width: usize, height: usize) {
         for i in (0..line.len()).rev() {
             let (r, g, b) = line[i];
 
-            if r < 245 || g < 245 || b < 245 {
+            if r < lim || g < lim || b < lim {
                 end = i;
                 break;
             }
@@ -206,7 +219,7 @@ fn glitch_block(pixels: &mut[(u8, u8, u8)], width: usize, height: usize) {
         let detour = &mut line[start..end];
 
         for i in 0..detour.len() {
-            detour[i] = detour[i & !0xff]
+            detour[i] = detour[i & !0xf]
         }
 
         // detour.sort_by(|&a, &b| {
@@ -218,12 +231,12 @@ fn glitch_block(pixels: &mut[(u8, u8, u8)], width: usize, height: usize) {
     }
 }
 
-fn glitch_block_sin(pixels: &mut[(u8, u8, u8)], width: usize, height: usize) {
+fn glitch_block_sin(pixels: &mut[(u8, u8, u8)], width: usize, height: usize, start: usize, stop: usize) {
 
     for y in 0..height {
         let offset = y * width;
 
-        let line = &mut pixels[offset..offset + width];
+        let line = &mut pixels[offset + start ..offset + stop];
 
         let mut start = 0;
 
@@ -253,7 +266,7 @@ fn glitch_block_sin(pixels: &mut[(u8, u8, u8)], width: usize, height: usize) {
 
         let detour = &mut line[start..end];
 
-        let align = ((y as f32).sin() * 256.).abs() as usize + 1;
+        let align = ((y as f32).sin() * 20.).abs() as usize + 1;
 
         for i in 0..detour.len() {
 
@@ -276,31 +289,31 @@ fn glitch_hf(pixels: &mut[(u8, u8, u8)], width: usize, height: usize) {
     for y in 0..height {
         let offset = y * width;
 
-        let diff = 100;
+        let diff = 50;
 
         let line = &mut pixels[offset..offset + width];
 
-        let mut out = vec![(0u8, 0u8, 0u8); width];
+        let mut out = vec![(0xffu8, 0xffu8, 0xffu8); width];
 
-        let edge = 100;
+        let edge = 30;
 
-        for i in 0..diff {
-            out[i] = line[i & !0xff];
-        }
+        // for i in 0..diff {
+        //     out[i] = line[i & !0xff];
+        // }
 
-        for i in diff..width {
-            out[i] = line[i & !0xff];
-        }
+        // for i in diff..width {
+        //     out[i] = line[i & !0xff];
+        // }
 
-        for i in diff..(line.len() - diff) {
-            let a = col_sum(line[i - diff]) as i32;
+        for i in 0..line.len() {
+            let a = col_sum(line[if i > diff { i - diff} else {0}]) as i32;
             let b = col_sum(line[i]) as i32;
-            let c = col_sum(line[i + diff]) as i32;
+            let c = col_sum(line[if i + diff >= width { width - 1 } else { i + diff }]) as i32;
 
             if (a - b).abs() > edge && (b - c).abs() > edge {
                 out[i] = line[i]
             } else {
-                out[i] = line[i & !0xff]
+                out[i] = line[i - (i % 71)]
             }
         }
 
@@ -309,6 +322,73 @@ fn glitch_hf(pixels: &mut[(u8, u8, u8)], width: usize, height: usize) {
         }
     }
 }
+
+fn glitch_hf_edge(pixels: &mut[(u8, u8, u8)], width: usize, height: usize) {
+
+    let mut start = 0;
+    
+    {
+        let line = &mut pixels[0..width];
+
+        let mut max_diff = 0;
+
+        for i in 1..line.len() {
+            let diff = col_diff(line[i - 1], line[i]);
+            if diff > max_diff {
+                start = i;
+                max_diff = diff;
+            }
+        }
+    }
+
+    for y in 0..height {
+        let offset = y * width;
+
+        let diff = 50;
+
+        let line = &mut pixels[offset..offset + width];
+
+        let mut out = vec![(0xffu8, 0xffu8, 0xffu8); width];
+
+        let edge = 30;
+
+        for i in 1..line.len() {
+            if col_diff(line[i - 1], line[i]) > 50 && (start as i32 - i as i32).abs() < 10 {
+                start = i;
+                break;
+            }
+        }
+
+        let off = start % 71;
+
+        for i in 0..line.len() {
+            let a = col_sum(line[if i > diff { i - diff} else {0}]) as i32;
+            let b = col_sum(line[i]) as i32;
+            let c = col_sum(line[if i + diff >= width { width - 1 } else { i + diff }]) as i32;
+
+            if (a - b).abs() > edge && (b - c).abs() > edge {
+                out[i] = line[i]
+            } else {
+                if i < start {
+                    let pos = i - i % 71;
+
+                    if pos > off {
+                        out[i] = line[pos + off];
+                    } else{
+                        out[i] = line[0];
+                    }
+                } else {
+                    out[i] = line[start + ((i - start) - (i - start) % 71)]
+                }
+            }
+        }
+
+        for i in 0..line.len() {
+            line[i] = out[i];
+        }
+    }
+}
+
 
 fn glitch_hf_detour(pixels: &mut[(u8, u8, u8)], width: usize, height: usize) {
 
@@ -383,6 +463,22 @@ fn glitch_hf_detour(pixels: &mut[(u8, u8, u8)], width: usize, height: usize) {
     }
 }
 
+fn glitch_swap(pixels: &mut[(u8, u8, u8)], width: usize, height: usize) {
+
+    for y in 0..height {
+        for x in 0..width {
+            let pixel = pixels[y * width + x];
+
+            if col_sum(pixel) < 200 {
+                let new_x = (x + 100) % width;
+                let new_y = (y + 100) % height;
+
+                pixels[y * width + x] = pixels[(new_y * width + new_x) ];
+            }
+        }
+    }
+}
+
 fn col_sum(c: (u8, u8, u8)) -> u16 {
     let (r, g, b) = c;
 
@@ -399,4 +495,19 @@ fn rotate(c: (u8, u8, u8)) -> (u8, u8, u8) {
     let (r, g, b) = c;
 
     (g, b, r)
+}
+
+fn col_diff(a: (u8, u8, u8), b: (u8, u8, u8)) -> u16 {
+    let (ra, ga, ba) = a;
+    let (rb, gb, bb) = b;
+
+    let ra = ra as i32;
+    let ga = ga as i32;
+    let ba = ba as i32;
+
+    let rb = rb as i32;
+    let gb = gb as i32;
+    let bb = bb as i32;
+
+    ((ra - rb).abs() + (ga - gb).abs() + (ba - bb).abs()) as u16
 }
