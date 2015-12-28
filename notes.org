@@ -1,0 +1,7 @@
+* Extract video frames
+** JPEG (good quality)
+  avconv -i ~/3A6B-MONTAGE_DEF_AU_20DEC2015-SORTIE_MONTAGE-SANS_BANDES.mpeg -f image2 -q:v 1 frames/%05d.jpg
+** PNG (lossless, big)
+  avconv -i ~/3A6B-MONTAGE_DEF_AU_20DEC2015-SORTIE_MONTAGE-SANS_BANDES.mpeg -f image2 frames/%05d.png
+* Convert video frames to video
+  avconv -i frames/%05d.png out.mpeg

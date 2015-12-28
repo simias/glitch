@@ -1,12 +1,16 @@
 extern crate image;
 
+use std::str::FromStr;
 use std::path::Path;
+use color::{Color, HdrColor};
+
+mod color;
 
 fn main() {
     let argv: Vec<_> = std::env::args().collect();
 
-    if argv.len() < 3 {
-        println!("Usage: {} <in-file> <out-file>", argv[0]);
+    if argv.len() < 4 {
+        println!("Usage: {} <in-file> <out-file> <lim> [debug]", argv[0]);
         return;
     }
 
@@ -22,18 +26,37 @@ fn main() {
 
     // Convert to an array of one tuple (u8, u8, u8) per pixel
     let pixels = unsafe {
-        let raw = image.as_mut_ptr() as *mut (u8, u8, u8);
+        let raw = image.as_mut_ptr() as *mut Color;
 
         std::slice::from_raw_parts_mut(raw, width * height)
     };
 
-    let stripw = width / 3;
+    let mut hdr_pixels: Vec<HdrColor> = pixels.iter().map(|&p| p.into()).collect();
+
+    //let stripw = width / 3;
 
     // glitch_filter_sort(pixels, width, height, 0, stripw);
     // glitch_block(pixels, width, height, stripw, stripw * 2);
     // glitch_block_sin(pixels, width, height, stripw * 2, width);
 
-    glitch_block_sin(pixels, width, height, 0, width);
+    let lim = f32::from_str(&argv[3]).unwrap() / 100.;
+
+    let edges: Vec<_> = sobel(&hdr_pixels, width, height).iter()
+        .map(|c| c.avg() > lim).collect();
+
+    pixel_sort(&mut hdr_pixels, &edges, width, height);
+
+    for i in 0..hdr_pixels.len() {
+        pixels[i] = hdr_pixels[i].into();
+    }
+
+    if argv.len() > 4 {
+        for i in 0..pixels.len() {
+            if edges[i] {
+                pixels[i] = Color(255, 0, 0)
+            }
+        }
+    }
 
     image::save_buffer(out_file,
                        &image,
@@ -42,6 +65,69 @@ fn main() {
                        image::ColorType::RGB(8)).unwrap();
 }
 
+fn sobel(pixels: &[HdrColor], width: usize, height: usize) -> Vec<HdrColor> {
+    let mut out = vec![HdrColor::black(); width * height];
+
+    for y in 1..(height - 1) {
+        for x in 1..(width - 1) {
+            let mut cx = HdrColor::black();
+
+            cx = cx + pixels[(y - 1) * width + (x - 1)] * -1.;
+            cx = cx + pixels[(y + 0) * width + (x - 1)] * -2.;
+            cx = cx + pixels[(y + 1) * width + (x - 1)] * -1.;
+
+            cx = cx + pixels[(y - 1) * width + (x + 1)] * 1.;
+            cx = cx + pixels[(y + 0) * width + (x + 1)] * 2.;
+            cx = cx + pixels[(y + 1) * width + (x + 1)] * 1.;
+
+            let mut cy = HdrColor::black();
+
+            cy = cy + pixels[(y - 1) * width + (x - 1)] * -1.;
+            cy = cy + pixels[(y - 1) * width + (x + 0)] * -2.;
+            cy = cy + pixels[(y - 1) * width + (x + 1)] * -1.;
+
+            cy = cy + pixels[(y + 1) * width + (x - 1)] * 1.;
+            cy = cy + pixels[(y + 1) * width + (x + 0)] * 2.;
+            cy = cy + pixels[(y + 1) * width + (x + 1)] * 1.;
+
+            out[y * width + x] = (cx * cx + cy * cy).sqrt();
+        }
+    }
+
+    out
+}
+
+fn pixel_sort(pixels: &mut[HdrColor],
+              edges: &[bool],
+              width: usize,
+              height: usize) {
+
+    for y in 0..height {
+        let offset = y * width;
+
+        let line = &mut pixels[offset..offset + width];
+        let edges = &edges[offset..offset + width];
+
+        let mut start = 0;
+        let mut started = false;
+
+        for x in 0..width {
+            if started {
+                if edges[x] {
+                    line[start..x].sort();
+                    started = false;
+                }
+            } else {
+                start = x;
+                started = !edges[x];
+            }
+        }
+
+        line[start..width].sort();
+    }
+}
+
+/*
 fn glitch_sort(pixels: &mut[(u8, u8, u8)], width: usize, height: usize) {
 
     for y in 0..height {
@@ -326,7 +412,7 @@ fn glitch_hf(pixels: &mut[(u8, u8, u8)], width: usize, height: usize) {
 fn glitch_hf_edge(pixels: &mut[(u8, u8, u8)], width: usize, height: usize) {
 
     let mut start = 0;
-    
+
     {
         let line = &mut pixels[0..width];
 
@@ -511,3 +597,4 @@ fn col_diff(a: (u8, u8, u8), b: (u8, u8, u8)) -> u16 {
 
     ((ra - rb).abs() + (ga - gb).abs() + (ba - bb).abs()) as u16
 }
+*/
