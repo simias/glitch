@@ -19,7 +19,7 @@ fn main() {
 
     let image = image::open(in_file).unwrap();
 
-    let image = image.to_rgb();
+    let image = image.into_rgb8();
     let width = image.width() as usize;
     let height = image.height() as usize;
     let mut image = image.into_raw();
@@ -62,7 +62,7 @@ fn main() {
                        &image,
                        width as u32,
                        height as u32,
-                       image::ColorType::RGB(8)).unwrap();
+                       image::ColorType::Rgb8).unwrap();
 }
 
 fn sobel(pixels: &[HdrColor], width: usize, height: usize) -> Vec<HdrColor> {
